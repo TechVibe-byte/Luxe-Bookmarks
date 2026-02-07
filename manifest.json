@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "LuxeMarks",
+  "short_name": "LuxeMarks",
+  "description": "A pitch-black, OLED-friendly bookmark manager for e-commerce links.",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["productivity", "shopping", "utilities"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Bookmarks",
+      "url": ".",
+      "icons": [{ "src": "assets/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

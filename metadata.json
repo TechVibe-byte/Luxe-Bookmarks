@@ -1,0 +1,5 @@
+{
+  "name": "OLED Luxe Bookmarks",
+  "description": "A pitch-black, OLED-friendly bookmark manager for e-commerce links. Uses Google Gemini to automatically extract product details, prices, and images from Amazon, Flipkart, Myntra, and Ajio.",
+  "requestFramePermissions": []
+}
