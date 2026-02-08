@@ -1,4 +1,4 @@
-import { Component, signal, effect, inject, OnInit } from '@angular/core';
+import { Component, signal, effect, inject, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SerpService } from './services/serp.service';
@@ -23,6 +23,9 @@ export class AppComponent implements OnInit {
   isAdding = signal<boolean>(false);
   errorMessage = signal<string | null>(null);
   
+  // Settings Menu State
+  showSettingsMenu = signal<boolean>(false);
+  
   // API Key State
   serpApiKey = signal<string>('');
   showKeyInput = signal<boolean>(false);
@@ -30,6 +33,10 @@ export class AppComponent implements OnInit {
   // Manual Mode State
   manualMode = signal<boolean>(false);
   manualPriceInput = signal<string>('');
+
+  // PWA Install State
+  deferredPrompt = signal<any>(null);
+  showInstallButton = signal<boolean>(false);
 
   constructor() {
     // Load API Key
@@ -40,27 +47,13 @@ export class AppComponent implements OnInit {
       this.showKeyInput.set(true);
     }
 
-    // Initial Load bookmarks (Mock Data)
-    this.bookmarks.set([
-      {
-        id: '1',
-        url: 'https://amazon.com/example',
-        title: 'Sony WH-1000XM5 Noise Canceling Headphones',
-        price: '$348.00',
-        store: 'Amazon',
-        timestamp: Date.now() - 1000000,
-        loading: false
-      },
-      {
-        id: '2',
-        url: 'https://flipkart.com/example',
-        title: 'Apple iPhone 15 (Black, 128 GB)',
-        price: '₹72,999',
-        store: 'Flipkart',
-        timestamp: Date.now() - 5000000,
-        loading: false
-      }
-    ]);
+    // Load Bookmarks from LocalStorage
+    this.loadBookmarks();
+
+    // Persistence Effect: Save bookmarks whenever they change
+    effect(() => {
+      localStorage.setItem('luxe_bookmarks', JSON.stringify(this.bookmarks()));
+    });
 
     // Theme effect
     effect(() => {
@@ -70,37 +63,89 @@ export class AppComponent implements OnInit {
         document.documentElement.classList.remove('dark');
       }
     });
+
+    // PWA Install Listener
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        this.deferredPrompt.set(e);
+        this.showInstallButton.set(true);
+      });
+
+      window.addEventListener('appinstalled', () => {
+        this.showInstallButton.set(false);
+        this.deferredPrompt.set(null);
+        console.log('PWA was installed');
+      });
+    }
+  }
+
+  private loadBookmarks() {
+    const saved = localStorage.getItem('luxe_bookmarks');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          this.bookmarks.set(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to load bookmarks', e);
+      }
+    }
+    // Default to empty array (No mock data for new users)
+    this.bookmarks.set([]);
   }
 
   ngOnInit(): void {
-    if ('serviceWorker' in navigator) {
-      // FIX: Use explicit relative path './sw.js' and scope './'
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(registration => {
-          console.log('PWA Service Worker registered with scope:', registration.scope);
-        })
-        .catch(err => {
-          console.error('PWA Service Worker registration failed:', err);
-        });
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const path = window.location.pathname;
+        const directory = path.substring(0, path.lastIndexOf('/') + 1);
+        const swUrl = `${window.location.origin}${directory}sw.js`;
+
+        navigator.serviceWorker.register(swUrl, { scope: './' })
+          .then(registration => {
+            console.log('PWA Service Worker registered with scope:', registration.scope);
+          })
+          .catch(err => {
+            console.error('PWA Service Worker registration failed:', err);
+          });
+      } catch (e) {
+        console.warn('PWA initialization failed:', e);
+      }
     }
+  }
+
+  // --- Actions ---
+
+  toggleSettingsMenu() {
+    this.showSettingsMenu.update(v => !v);
+  }
+
+  closeSettingsMenu() {
+    this.showSettingsMenu.set(false);
   }
 
   toggleTheme() {
     this.darkMode.update(v => !v);
+    this.closeSettingsMenu();
   }
 
   toggleManualMode() {
     this.manualMode.update(v => !v);
     if (this.manualMode()) {
-      this.showKeyInput.set(false); // Hide API key when switching to manual
+      this.showKeyInput.set(false);
     }
+    // Don't close menu immediately so user can see toggle change
   }
 
   toggleKeyInput() {
     this.showKeyInput.update(v => !v);
     if (this.showKeyInput()) {
-      this.manualMode.set(false); // Ensure manual mode is off when opening API key settings
+      this.manualMode.set(false);
     }
+    this.closeSettingsMenu();
   }
 
   saveApiKey() {
@@ -111,6 +156,140 @@ export class AppComponent implements OnInit {
       this.errorMessage.set(null);
     }
   }
+
+  async installPwa() {
+    const promptEvent = this.deferredPrompt();
+    if (!promptEvent) return;
+    promptEvent.prompt();
+    const { outcome } = await promptEvent.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+    this.deferredPrompt.set(null);
+    this.showInstallButton.set(false);
+  }
+
+  // --- Import / Export ---
+
+  exportCsv() {
+    if (this.bookmarks().length === 0) {
+      this.showError('No bookmarks to export');
+      return;
+    }
+
+    const headers = ['Title', 'Price', 'Store', 'Date', 'URL'];
+    const rows = this.bookmarks().map(b => [
+      `"${b.title.replace(/"/g, '""')}"`,
+      `"${b.price}"`,
+      `"${b.store}"`,
+      `"${new Date(b.timestamp).toLocaleDateString()}"`,
+      `"${b.url}"`
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    this.downloadFile(csvContent, `luxemarks_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv;charset=utf-8;');
+    this.closeSettingsMenu();
+  }
+
+  exportJson() {
+    if (this.bookmarks().length === 0) {
+      this.showError('No bookmarks to export');
+      return;
+    }
+    const data = JSON.stringify(this.bookmarks(), null, 2);
+    this.downloadFile(data, `luxemarks_backup_${new Date().toISOString().slice(0, 10)}.json`, 'application/json');
+    this.closeSettingsMenu();
+  }
+
+  triggerImport() {
+    const fileInput = document.getElementById('fileUpload') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+    this.closeSettingsMenu();
+  }
+
+  handleFileImport(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+
+        if (Array.isArray(parsed)) {
+          // Merge strategy: Add new ones, update existing ones based on ID?
+          // For simplicity in this app, we'll append unique ones or replace if ID matches.
+          // Let's just replace the whole list or merge? "Import" usually implies merging.
+          
+          const currentBookmarks = this.bookmarks();
+          const newBookmarks: Bookmark[] = [];
+          const currentIds = new Set(currentBookmarks.map(b => b.id));
+
+          let addedCount = 0;
+
+          parsed.forEach((item: any) => {
+            // Basic validation
+            if (item.url && item.title) {
+               // Assign new ID if missing to avoid collision? 
+               // Or if it's a backup restore, keep ID.
+               // We will check if ID exists.
+               if (!item.id || !currentIds.has(item.id)) {
+                 const cleanItem: Bookmark = {
+                   id: item.id || crypto.randomUUID(),
+                   url: item.url,
+                   title: item.title,
+                   price: item.price || 'Check Price',
+                   store: item.store || 'Web',
+                   timestamp: item.timestamp || Date.now(),
+                   loading: false
+                 };
+                 newBookmarks.push(cleanItem);
+                 addedCount++;
+               }
+            }
+          });
+
+          if (addedCount > 0) {
+            this.bookmarks.update(prev => [...newBookmarks, ...prev]);
+            this.showError(`Imported ${addedCount} bookmarks successfully.`);
+          } else {
+             this.showError('No new bookmarks found in file.');
+          }
+        } else {
+          this.showError('Invalid file format. Expected a JSON array.');
+        }
+      } catch (err) {
+        console.error(err);
+        this.showError('Failed to parse file. Please upload a valid JSON backup.');
+      }
+      
+      // Reset input
+      input.value = '';
+    };
+
+    reader.readAsText(file);
+  }
+
+  private downloadFile(content: string, fileName: string, contentType: string) {
+    const blob = new Blob([content], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // --- Add / Manage ---
 
   async addLink() {
     const url = this.urlInput().trim();
@@ -227,7 +406,7 @@ export class AppComponent implements OnInit {
 
   private showError(msg: string) {
     this.errorMessage.set(msg);
-    setTimeout(() => this.errorMessage.set(null), 5000);
+    setTimeout(() => this.errorMessage.set(null), 3000);
   }
 
   hasBookmarks = () => this.bookmarks().length > 0;
