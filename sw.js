@@ -1,14 +1,13 @@
 // Defines the name of the cache for this version of the app.
 // Update this string when you deploy a new version to force a cache refresh.
-const CACHE_NAME = 'luxemarks-cache-v4';
+const CACHE_NAME = 'luxemarks-cache-v5';
 
-// Lists the core files (app shell) to be cached when the service worker is installed.
+// Only cache critical local files during install.
+// We remove './' to avoid 404s on servers that don't map root to index automatically during XHR.
+// We remove external fonts from here; they will be cached at runtime (lazy caching).
 const ASSETS_TO_CACHE = [
-  './',
   './index.html',
-  'https://fonts.googleapis.com/icon?family=Material+Icons+Round',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
-  // Note: Actual .woff2 font files are cached dynamically by the fetch handler below
+  './manifest.json'
 ];
 
 // 'install' event: Caches the app shell and forces the SW to become active immediately.
@@ -20,6 +19,7 @@ self.addEventListener('install', (event) => {
         console.log('Service Worker: Caching App Shell');
         return cache.addAll(ASSETS_TO_CACHE);
       })
+      .catch((err) => console.error('Service Worker Install Failed:', err))
   );
 });
 
@@ -63,11 +63,12 @@ self.addEventListener('fetch', (event) => {
     }
 
     // 2. Navigation (HTML): Network First, Fallback to Cache
+    // This ensures users always get the latest version if online, but works offline.
     if (event.request.mode === 'navigate') {
         event.respondWith(
             fetch(event.request)
                 .catch(() => {
-                    return caches.match('./index.html') || caches.match('./');
+                    return caches.match('./index.html');
                 })
         );
         return;
@@ -83,8 +84,9 @@ self.addEventListener('fetch', (event) => {
                 }
 
                 return fetch(event.request).then((networkResponse) => {
-                    // Check if we received a valid response
-                    if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic' && networkResponse.type !== 'cors') {
+                    // Check if we received a valid response.
+                    // Note: We ALLOW opaque responses (status 0, type 'opaque') for things like Google Fonts/External Images.
+                    if (!networkResponse || (networkResponse.status !== 200 && networkResponse.status !== 0)) {
                         return networkResponse;
                     }
 
@@ -93,10 +95,18 @@ self.addEventListener('fetch', (event) => {
 
                     caches.open(CACHE_NAME)
                         .then((cache) => {
-                            cache.put(event.request, responseToCache);
+                            try {
+                                cache.put(event.request, responseToCache);
+                            } catch (e) {
+                                console.warn('Failed to cache resource:', event.request.url, e);
+                            }
                         });
 
                     return networkResponse;
+                }).catch(err => {
+                    // Network failed and not in cache -> resource unavailable.
+                    // Could return a fallback placeholder image here if needed.
+                    throw err;
                 });
             })
     );

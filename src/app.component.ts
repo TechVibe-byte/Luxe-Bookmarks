@@ -99,21 +99,14 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      try {
-        const path = window.location.pathname;
-        const directory = path.substring(0, path.lastIndexOf('/') + 1);
-        const swUrl = `${window.location.origin}${directory}sw.js`;
-
-        navigator.serviceWorker.register(swUrl, { scope: './' })
-          .then(registration => {
-            console.log('PWA Service Worker registered with scope:', registration.scope);
-          })
-          .catch(err => {
-            console.error('PWA Service Worker registration failed:', err);
-          });
-      } catch (e) {
-        console.warn('PWA initialization failed:', e);
-      }
+      // Use explicit relative path. This works because index.html and sw.js are siblings.
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(registration => {
+          console.log('PWA Service Worker registered with scope:', registration.scope);
+        })
+        .catch(err => {
+          console.error('PWA Service Worker registration failed:', err);
+        });
     }
   }
 
