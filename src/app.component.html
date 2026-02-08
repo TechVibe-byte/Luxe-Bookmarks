@@ -20,7 +20,7 @@
       <!-- Actions -->
       <div class="flex items-center gap-2 relative">
         
-        <!-- PWA Install Button -->
+        <!-- PWA Install Button (Header - Visible on large screens) -->
         @if (showInstallButton()) {
           <button 
             (click)="installPwa()"
@@ -29,16 +29,6 @@
             title="Install App">
             <span class="material-icons-round text-sm">download</span>
             <span class="text-sm font-medium">Install</span>
-          </button>
-          
-          <!-- Mobile Icon Only -->
-          <button 
-            (click)="installPwa()"
-            class="sm:hidden p-2 rounded-full transition-all duration-300
-            hover:bg-gray-100 dark:hover:bg-gray-800
-            text-indigo-600 dark:text-indigo-400"
-            title="Install App">
-            <span class="material-icons-round">download</span>
           </button>
         }
 
@@ -71,6 +61,19 @@
         @if (showSettingsMenu()) {
           <div class="absolute top-14 right-0 w-64 bg-white dark:bg-oled-gray rounded-xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden transform transition-all duration-200 origin-top-right z-50 mr-2 sm:mr-0">
             
+            <!-- Install App Section (Menu) -->
+            @if (showInstallButton()) {
+              <div class="border-b border-gray-100 dark:border-gray-800 py-2">
+                 <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Application
+                </div>
+                <button (click)="installPwa()" class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors text-sm text-indigo-600 dark:text-indigo-400 font-medium">
+                  <span class="material-icons-round text-xl">install_mobile</span>
+                  Install App
+                </button>
+              </div>
+            }
+
             <div class="py-2">
               <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Configuration
