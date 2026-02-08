@@ -34,9 +34,10 @@ export class AppComponent implements OnInit {
   manualMode = signal<boolean>(false);
   manualPriceInput = signal<string>('');
 
-  // PWA Install State
+  // PWA State
   deferredPrompt = signal<any>(null);
   showInstallButton = signal<boolean>(false);
+  isOnline = signal<boolean>(true);
 
   constructor() {
     // Load API Key
@@ -64,8 +65,9 @@ export class AppComponent implements OnInit {
       }
     });
 
-    // PWA Install Listener
+    // PWA & Network Listeners
     if (typeof window !== 'undefined') {
+      // Install Prompt
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         this.deferredPrompt.set(e);
@@ -77,6 +79,11 @@ export class AppComponent implements OnInit {
         this.deferredPrompt.set(null);
         console.log('PWA was installed');
       });
+
+      // Offline Detection
+      this.isOnline.set(navigator.onLine);
+      window.addEventListener('online', () => this.isOnline.set(true));
+      window.addEventListener('offline', () => this.isOnline.set(false));
     }
   }
 
@@ -285,6 +292,11 @@ export class AppComponent implements OnInit {
   // --- Add / Manage ---
 
   async addLink() {
+    if (!this.isOnline()) {
+      this.showError('You are offline. Cannot fetch new link details.');
+      return;
+    }
+
     const url = this.urlInput().trim();
     if (!url) return;
 
